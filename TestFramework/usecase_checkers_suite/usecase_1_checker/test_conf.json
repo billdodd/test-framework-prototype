@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "program": "python",
+      "args": ["usecase_1_checker.py", "-r", "$TARGET_SYSTEM", "-u",
+        "$USERNAME", "-p", "$PASSWORD", "-S", "$HTTPS", "twiddle", "knob1"]
+    },
+    {
+      "program": "python",
+      "args": ["usecase_2_checker.py", "-r", "$TARGET_SYSTEM", "-u",
+        "$USERNAME", "-p", "$PASSWORD", "-S", "$HTTPS", "twiddle", "knob2"]
+    }
+  ]
+}
