@@ -120,7 +120,7 @@ def display_entry(depth, path, dirs, files):
 
 def get_config_file(files):
     for file in files:
-        if file == "test.conf":
+        if file.endswith("_conf.json"):
             return file
     return None
 
