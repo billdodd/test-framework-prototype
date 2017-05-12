@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 
@@ -7,8 +8,10 @@ class TestFramework:
     def __init__(self, path):
         self.path = path
         self.config_file = None
+        self.config_dict = None
         self.suite_list = list()
         self.suite_dict = dict()
+        self.config_vars = dict()
 
     def get_path(self):
         return self.path
@@ -18,6 +21,31 @@ class TestFramework:
 
     def get_config_file(self):
         return self.config_file
+
+    def set_config_data(self, config_dict):
+        self.config_dict = config_dict
+        if "credentials" in self.config_dict:
+            credentials = self.config_dict["credentials"]
+            if "username" in credentials:
+                self.config_vars["$USERNAME"] = credentials["username"]
+            if "password" in credentials:
+                self.config_vars["$PASSWORD"] = credentials["password"]
+        if "target_system" in self.config_dict:
+            self.config_vars["$TARGET_SYSTEM"] = self.config_dict["target_system"]
+        if "https" in self.config_dict:
+            self.config_vars["$HTTPS"] = self.config_dict["https"]
+
+    def substitute_config_variables(self, test_config_dict):
+        if "tests" in test_config_dict:
+            tests = test_config_dict["tests"]
+            for test_case in tests:
+                if "args" in test_case:
+                    for index, arg in enumerate(test_case["args"]):
+                        if arg in self.config_vars:
+                            test_case["args"][index] = self.config_vars[arg]
+
+    def get_config_data(self):
+        return self.config_dict
 
     def add_suite(self, test_suite):
         self.suite_list.append(test_suite)
@@ -40,6 +68,7 @@ class TestSuite:
         self.path = os.path.join(path, subdir)
         self.name = subdir
         self.config_file = None
+        self.config_dict = None
         self.test_list = list()
         self.test_dict = dict()
 
@@ -51,6 +80,12 @@ class TestSuite:
 
     def get_config_file(self):
         return self.config_file
+
+    def set_config_data(self, config_dict):
+        self.config_dict = config_dict
+
+    def get_config_data(self):
+        return self.config_dict
 
     def get_name(self):
         return self.name
@@ -76,6 +111,7 @@ class TestCase:
         self.path = os.path.join(path, subdir)
         self.name = subdir
         self.config_file = None
+        self.config_dict = None
 
     def get_path(self):
         return self.path
@@ -85,6 +121,12 @@ class TestCase:
 
     def get_config_file(self):
         return self.config_file
+
+    def set_config_data(self, config_dict):
+        self.config_dict = config_dict
+
+    def get_config_data(self):
+        return self.config_dict
 
     def get_name(self):
         return self.name
@@ -118,10 +160,27 @@ def display_entry(depth, path, dirs, files):
         print("    {}".format(subdir))
 
 
-def get_config_file(files):
-    for file in files:
-        if file.endswith("_conf.json"):
-            return file
+def read_config_file(path, json_file):
+    try:
+        with open(os.path.join(path, json_file)) as json_data:
+            json_dict = json.load(json_data)
+        # TODO: Also do schema validation; need schema first
+    except OSError as e:
+        print("Error opening file {} in directory {}, exception: {}"
+              .format(json_file, path, e), file=sys.stderr)
+        sys.exit(1)
+    except ValueError as e:
+        print("Error loading JSON from file {} in directory {}, exception: {}"
+              .format(json_file, path, e), file=sys.stderr)
+        sys.exit(1)
+    else:
+        return json_dict
+
+
+def get_config_file(depth, files):
+    config_files = ["framework_conf.json", "suite_conf.json", "test_conf.json"]
+    if config_files[depth] in files:
+        return config_files[depth]
     return None
 
 
@@ -129,23 +188,32 @@ def add_details_to_test_case(framework, depth, path, dirs, files):
     _, suite_name, test_name = path.rsplit(os.sep, 2)
     suite = framework.get_suite(suite_name)
     test_case = suite.get_test_case(test_name)
-    config_file = get_config_file(files)
-    test_case.set_config_file(config_file)
+    config_file = get_config_file(depth, files)
+    if config_file is not None:
+        config_dict = read_config_file(path, config_file)
+        test_case.set_config_file(config_file)
+        test_case.set_config_data(config_dict)
 
 
 def add_test_cases_to_suite(framework, depth, path, dirs, files):
     _, suite_name = path.rsplit(os.sep, 1)
     suite = framework.get_suite(suite_name)
-    config_file = get_config_file(files)
-    suite.set_config_file(config_file)
+    config_file = get_config_file(depth, files)
+    if config_file is not None:
+        config_dict = read_config_file(path, config_file)
+        suite.set_config_file(config_file)
+        suite.set_config_data(config_dict)
     for subdir in dirs:
         test_case = TestCase(path, subdir)
         suite.add_test_case(test_case)
 
 
 def add_test_suites(framework, depth, path, dirs, files):
-    config_file = get_config_file(files)
-    framework.set_config_file(config_file)
+    config_file = get_config_file(depth, files)
+    if config_file is not None:
+        config_dict = read_config_file(path, config_file)
+        framework.set_config_file(config_file)
+        framework.set_config_data(config_dict)
     for subdir in dirs:
         suite = TestSuite(path, subdir)
         framework.add_suite(suite)
@@ -172,16 +240,22 @@ def main(argv):
             exit(1)
 
     print("Test Framework: config_file = {}, path = {}".format(framework.get_config_file(), framework.get_path()))
+    if framework.get_config_file() is None:
+        print("Error: Top-level config file (framework_conf.json) not found")
     suites = framework.get_suites()
     for suite in suites:
-        if suite.get_config_file() is not None:
-            print("    Suite: name = {}, config_file = {}, path = {}"
-                  .format(suite.get_name(), suite.get_config_file(), suite.get_path()))
-            cases = suite.get_test_cases()
-            for case in cases:
-                if case.get_config_file() is not None:
-                    print("        Testcase: name = {}, config_file = {}, path = {}"
-                          .format(case.get_name(), case.get_config_file(), case.get_path()))
+        print("    Suite: name = {}, config_file = {}, path = {}"
+              .format(suite.get_name(), suite.get_config_file(), suite.get_path()))
+        cases = suite.get_test_cases()
+        for case in cases:
+            if case.get_config_file() is not None:
+                print("        Test case: name = {}, config_file = {}, path = {}"
+                      .format(case.get_name(), case.get_config_file(), case.get_path()))
+                framework.substitute_config_variables(case.get_config_data())
+                print("            test config after substitution: {}".format(case.get_config_data()))
+            else:
+                print("        Test case: name = {} skipped, config file (test_conf.json) not found, path = {}"
+                      .format(case.get_name(), case.get_path()))
 
 
 if __name__ == "__main__":
