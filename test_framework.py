@@ -1,5 +1,7 @@
+import datetime
 import json
 import os
+import subprocess
 import sys
 
 
@@ -12,6 +14,7 @@ class TestFramework:
         self.suite_list = list()
         self.suite_dict = dict()
         self.config_vars = dict()
+        self.output_subdir = "output-{:%Y-%m-%dT%H:%M:%SZ}".format(datetime.datetime.now(datetime.timezone.utc))
 
     def get_path(self):
         return self.path
@@ -61,6 +64,9 @@ class TestFramework:
     def get_suites(self):
         return self.suite_list
 
+    def get_output_subdir(self):
+        return self.output_subdir
+
 
 class TestSuite:
 
@@ -107,9 +113,10 @@ class TestSuite:
 
 class TestCase:
 
-    def __init__(self, path, subdir):
+    def __init__(self, path, subdir, output_subdir):
         self.path = os.path.join(path, subdir)
         self.name = subdir
+        self.output_subdir = os.path.join(self.path, output_subdir)
         self.config_file = None
         self.config_dict = None
 
@@ -130,6 +137,63 @@ class TestCase:
 
     def get_name(self):
         return self.name
+
+    def get_test_case_path(self):
+        return self.path
+
+    def run(self):
+        # Change to the directory containing the test case
+        try:
+            os.chdir(self.path)
+        except OSError as e:
+            print("Error: Unable to change directory to {}, error: {}".format(self.path, e), file=sys.stderr)
+            return
+        # Create output directory (should NOT already exist)
+        try:
+            os.mkdir(self.output_subdir)
+        except OSError as e:
+            print("Error: Unable to create output directory {}, error: {}".format(self.output_subdir, e),
+                  file=sys.stderr)
+            return
+        # Open output files for STDOUT and STDERR
+        try:
+            std_out_path = os.path.join(self.output_subdir, "stdout.log")
+            std_out_fd = open(std_out_path, "w")
+            std_err_path = os.path.join(self.output_subdir, "stderr.log")
+            std_err_fd = open(std_err_path, "w")
+        except OSError as e:
+            print("Error: Unable to create output file in directory {}, error: {}".format(self.output_subdir, e),
+                  file=sys.stderr)
+            return
+        # Run test(s)
+        if self.config_dict is not None and "tests" in self.config_dict:
+            tests = self.config_dict["tests"]
+            for test in tests:
+                if "program" in test and "args" in test:
+                    args = [test["program"]] + test["args"]
+                    try:
+                        return_code = subprocess.call(args, stdout=std_out_fd, stderr=std_err_fd)
+                        print("return code = {}".format(return_code))
+                    except OSError as e:
+                        print("Error: OSError while trying  to execute test {}, error: {}".format(args, e),
+                              file=sys.stderr)
+                    except ValueError as e:
+                        print("Error: ValueError while trying  to execute test {}, error: {}".format(args, e),
+                              file=sys.stderr)
+                    except subprocess.TimeoutExpired as e:
+                        print("Error: TimeoutExpired while trying  to execute test {}, error: {}".format(args, e),
+                              file=sys.stderr)
+                    else:
+                        pass
+                else:
+                    print("Warning: Skipping test in {}: parameter 'program' or 'args' missing from 'tests' element {}"
+                          .format(self.name, test))
+        else:
+            print("Warning: Skipping {}: test config data empty or 'tests' parameter missing. Test config data: {}"
+                  .format(self.name, self.config_dict))
+        # Close output files
+        std_out_fd.close()
+        std_err_fd.close()
 
 
 def walk_depth(directory, max_depth=1):
@@ -204,7 +268,7 @@ def add_test_cases_to_suite(framework, depth, path, dirs, files):
         suite.set_config_file(config_file)
         suite.set_config_data(config_dict)
     for subdir in dirs:
-        test_case = TestCase(path, subdir)
+        test_case = TestCase(path, subdir, framework.get_output_subdir())
         suite.add_test_case(test_case)
 
 
@@ -253,6 +317,7 @@ def main(argv):
                       .format(case.get_name(), case.get_config_file(), case.get_path()))
                 framework.substitute_config_variables(case.get_config_data())
                 print("            test config after substitution: {}".format(case.get_config_data()))
+                case.run()
             else:
                 print("        Test case: name = {} skipped, config file (test_conf.json) not found, path = {}"
                       .format(case.get_name(), case.get_path()))
