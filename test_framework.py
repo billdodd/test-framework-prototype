@@ -27,6 +27,7 @@ class TestFramework:
 
     def set_config_data(self, config_dict):
         self.config_dict = config_dict
+        self.config_vars["$OUTPUT_SUBDIR"] = self.output_subdir
         if "credentials" in self.config_dict:
             credentials = self.config_dict["credentials"]
             if "username" in credentials:
@@ -172,8 +173,9 @@ class TestCase:
                 if "program" in test and "args" in test:
                     args = [test["program"]] + test["args"]
                     try:
+                        print("{}Running test in {}".format("        ", self.name))
                         return_code = subprocess.call(args, stdout=std_out_fd, stderr=std_err_fd)
-                        print("return code = {}".format(return_code))
+                        print("{}Return code = {}".format("        ", return_code))
                     except OSError as e:
                         print("Error: OSError while trying  to execute test {}, error: {}".format(args, e),
                               file=sys.stderr)
@@ -186,11 +188,11 @@ class TestCase:
                     else:
                         pass
                 else:
-                    print("Warning: Skipping test in {}: parameter 'program' or 'args' missing from 'tests' element {}"
-                          .format(self.name, test))
+                    print("{}Warning: Skipping test in {}: element 'program' or 'args' missing from 'tests' element {}"
+                          .format("        ", self.name, test))
         else:
-            print("Warning: Skipping {}: test config data empty or 'tests' parameter missing. Test config data: {}"
-                  .format(self.name, self.config_dict))
+            print("{}Warning: Skipping {}: test config data empty or 'tests' element missing. Test config data: {}"
+                  .format("        ", self.name, self.config_dict))
         # Close output files
         std_out_fd.close()
         std_err_fd.close()
@@ -305,7 +307,7 @@ def main(argv):
 
     print("Test Framework: config_file = {}, path = {}".format(framework.get_config_file(), framework.get_path()))
     if framework.get_config_file() is None:
-        print("Error: Top-level config file (framework_conf.json) not found")
+        print("Error: Top-level config file (framework_conf.json) not found", file=sys.stderr)
     suites = framework.get_suites()
     for suite in suites:
         print("    Suite: name = {}, config_file = {}, path = {}"
@@ -316,7 +318,6 @@ def main(argv):
                 print("        Test case: name = {}, config_file = {}, path = {}"
                       .format(case.get_name(), case.get_config_file(), case.get_path()))
                 framework.substitute_config_variables(case.get_config_data())
-                print("            test config after substitution: {}".format(case.get_config_data()))
                 case.run()
             else:
                 print("        Test case: name = {} skipped, config file (test_conf.json) not found, path = {}"

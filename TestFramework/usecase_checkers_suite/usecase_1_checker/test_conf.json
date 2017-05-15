@@ -2,13 +2,13 @@
   "tests": [
     {
       "program": "python",
-      "args": ["usecase_1_checker.py", "-r", "$TARGET_SYSTEM", "-u",
-        "$USERNAME", "-p", "$PASSWORD", "-S", "$HTTPS", "twiddle", "knob1"]
+      "args": ["usecase_1_checker.py", "-r", "$TARGET_SYSTEM", "-u", "$USERNAME",
+        "-p", "$PASSWORD", "-S", "$HTTPS", "-d", "$OUTPUT_SUBDIR", "twiddle", "knob1"]
     },
     {
       "program": "python",
-      "args": ["usecase_1_checker.py", "-r", "$TARGET_SYSTEM", "-u",
-        "$USERNAME", "-p", "$PASSWORD", "-S", "$HTTPS", "twiddle", "knob2"]
+      "args": ["usecase_1_checker.py", "-r", "$TARGET_SYSTEM", "-u", "$USERNAME",
+        "-p", "$PASSWORD", "-S", "$HTTPS", "-d", "$OUTPUT_SUBDIR", "twiddle", "knob2"]
     }
   ]
 }
