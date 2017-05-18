@@ -47,6 +47,7 @@ class TestFramework:
                     for index, arg in enumerate(test_case["args"]):
                         if arg in self.config_vars:
                             test_case["args"][index] = self.config_vars[arg]
+            # print("after substitution: {}".format(test_config_dict))
 
     def get_config_data(self):
         return self.config_dict
